@@ -312,6 +312,7 @@ class ManagedHostStore:
             "port": int(draft["port"]),
             "enabled": bool(draft["enabled"]),
             "send_mode": draft["send_mode"],
+            "username": draft["username"],
         }
         managed_hosts = [host for host in self.config.get("managed_hosts", []) if host.get("id") != host_id]
         managed_hosts.append(record)
@@ -589,6 +590,7 @@ def test_managed_host_connection(draft: dict[str, Any], config: dict[str, Any] |
         "ssh_target": str(draft.get("ssh_target", "")),
         "port": int(draft.get("port", 22)),
         "send_mode": str(draft.get("send_mode", "stdin") or "stdin"),
+        "username": str(draft.get("username", "")),
     }
     probe_config = json.loads(json.dumps(DEFAULT_CONFIG))
     if config:
@@ -1180,12 +1182,12 @@ def run_ssh_probe(host_cfg: dict[str, Any], config: dict[str, Any]) -> dict[str,
         cmd += ["-i", expand_path(host_cfg["identity_file"])]
     username = host_cfg.get("username", "").strip()
     target = f"{username}@{host_cfg['ssh_target']}" if username else host_cfg["ssh_target"]
-    # Try newer python versions first; fall back to python3
-    py_cmd = "python3.12 - --probe {p} 2>/dev/null || python3.11 - --probe {p} 2>/dev/null || python3.10 - --probe {p} 2>/dev/null || python3.9 - --probe {p} 2>/dev/null || python3 - --probe {p}".format(p=payload)
-    cmd += [target, "/bin/bash", "-lc", py_cmd]
+    cmd += [target, f"python3 - --probe {payload}"]
     proc = subprocess.run(cmd, input=source, text=True, capture_output=True, timeout=25)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"ssh exit {proc.returncode}")
+    if not proc.stdout.strip():
+        raise RuntimeError(f"Remote probe returned no output. stderr: {proc.stderr.strip()!r}")
     return json.loads(proc.stdout)
 
 
@@ -1853,11 +1855,17 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.probe:
-        payload = json.loads(base64.b64decode(args.probe).decode("utf-8"))
-        config = payload["config"]
-        host_cfg = payload["host"]
-        result = summarize_host(config, host_cfg)
-        sys.stdout.write(json.dumps(result, ensure_ascii=False))
+        try:
+            payload = json.loads(base64.b64decode(args.probe).decode("utf-8"))
+            config = payload["config"]
+            host_cfg = payload["host"]
+            result = summarize_host(config, host_cfg)
+            sys.stdout.write(json.dumps(result, ensure_ascii=False))
+            sys.stdout.flush()
+        except Exception as exc:
+            sys.stderr.write(f"probe error: {exc}\n")
+            sys.stderr.flush()
+            sys.exit(1)
         return
 
     config = load_config(args.config)
