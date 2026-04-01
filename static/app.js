@@ -33,6 +33,18 @@ function fmtTs(ts) {
   }
 }
 
+function truncateStr(s, n) {
+  if (!s) return "";
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 async function postJson(url, payload) {
   const res = await fetch(url, {
     method: "POST",
@@ -248,6 +260,35 @@ function makeCard(agent) {
   node.querySelector(".metrics").textContent =
     `cpu ${agent.cpu?.toFixed?.(1) ?? agent.cpu}% · mem ${agent.mem?.toFixed?.(1) ?? agent.mem}% · 在跑 ${fmtAge(agent.uptime_sec)} · 心跳 ${fmtAge(agent.heartbeat_age_sec)} 前`;
   node.querySelector(".recent-output").textContent = agent.recent_output || agent.last_user_message || "暂时没抓到动静";
+
+  // Activity line
+  const heroText = node.querySelector(".hero-text");
+  if (heroText) {
+    const activityEl = document.createElement("div");
+    activityEl.className = "activity-line";
+    if (agent.current_tool) {
+      const badge = document.createElement("span");
+      badge.className = "tool-badge";
+      badge.textContent = agent.current_tool;
+      activityEl.appendChild(badge);
+    }
+    activityEl.appendChild(document.createTextNode(
+      truncateStr(agent.recent_output || agent.last_user_message || "暂时没抓到动静", 80)
+    ));
+    heroText.appendChild(activityEl);
+
+    // Context mini-bar
+    if (agent.context_pct != null) {
+      const level = agent.context_pct >= 80 ? "high" : agent.context_pct >= 50 ? "mid" : "low";
+      const ctxRow = document.createElement("div");
+      ctxRow.className = "ctx-row";
+      ctxRow.innerHTML =
+        `<span class="ctx-label">Context</span>` +
+        `<div class="ctx-bar"><div class="ctx-fill ctx-${level}" style="width:${agent.context_pct}%"></div></div>` +
+        `<span class="ctx-pct${level === "high" ? " ctx-pct-high" : ""}">${agent.context_pct}%</span>`;
+      heroText.appendChild(ctxRow);
+    }
+  }
   const list = node.querySelector(".pending-list");
   const items = agent.pending_items?.length ? agent.pending_items : ["（暂时没翻到明确待办）"];
   items.slice(0, 6).forEach((item) => {
@@ -314,6 +355,11 @@ function makeCard(agent) {
       }
     });
   }
+  node.addEventListener("click", (e) => {
+    if (e.target.closest("button, textarea, a, details, summary")) return;
+    openDrawer(agent.id); // openDrawer defined in Task 7
+  });
+  node.style.cursor = "pointer";
   return node;
 }
 
