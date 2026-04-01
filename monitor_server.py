@@ -1781,6 +1781,8 @@ def send_agent_action(store: SnapshotStore, agent_id: str, message: str) -> dict
     if not agent or not host_cfg:
         raise ValueError("Agent not found")
     send_mode = host_cfg.get("send_mode") or store.config.get("send_mode")
+    if send_mode is None and host_cfg.get("mode", "local") == "local":
+        send_mode = "stdin"
     template = host_cfg.get("send_command_template") or store.config.get("send_command_template")
     if send_mode == "stdin":
         if host_cfg.get("mode", "local") == "local":
