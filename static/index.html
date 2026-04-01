@@ -180,6 +180,39 @@
     </article>
   </template>
 
+  <div id="agentDrawer" class="drawer">
+    <div class="drawer-header">
+      <div class="drawer-header-top">
+        <span id="drawerStatus" class="pill"></span>
+        <span id="drawerProject" class="drawer-project"></span>
+        <button class="drawer-close" id="drawerCloseBtn" type="button">✕</button>
+      </div>
+      <div id="drawerMeta" class="drawer-meta"></div>
+      <div id="drawerBranch" class="drawer-meta"></div>
+      <div id="drawerCtxRow" class="drawer-ctx" style="display:none">
+        <span id="drawerCtxLabel" class="drawer-ctx-label">Context</span>
+        <div class="drawer-ctx-bar"><div id="drawerCtxFill" class="drawer-ctx-fill" style="width:0%"></div></div>
+        <span id="drawerCtxPct" class="drawer-ctx-pct">0%</span>
+      </div>
+    </div>
+    <div id="drawerConvo" class="convo"></div>
+    <div class="cmd-panel">
+      <div class="cmd-label">快捷命令</div>
+      <div id="drawerCmdChips" class="cmd-chips">
+        <span class="cmd-chip" data-cmd="/commit">/commit</span>
+        <span class="cmd-chip" data-cmd="/simplify">/simplify</span>
+        <span class="cmd-chip" data-cmd="/review">/review</span>
+        <span class="cmd-chip" data-cmd="/test">/test</span>
+        <span class="cmd-chip" data-cmd="继续">继续</span>
+      </div>
+      <div class="send-row">
+        <input id="drawerInput" class="send-input" type="text" placeholder="发话或输入 slash 命令…">
+        <button id="drawerSendBtn" class="send-btn" type="button">发送</button>
+      </div>
+      <div id="drawerFeedback" class="action-feedback"></div>
+    </div>
+  </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>
