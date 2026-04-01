@@ -3,6 +3,7 @@ const state = {
   search: "",
   snapshot: null,
   managedHosts: [],
+  drawerAgentId: null,
 };
 
 const toolOrder = ["codex", "claude"];
@@ -231,6 +232,126 @@ function agentMatches(agent) {
     .join(" ")
     .toLowerCase();
   return hay.includes(q);
+}
+
+function openDrawer(agentId) {
+  state.drawerAgentId = agentId;
+  $("agentDrawer").classList.add("open");
+  $("board").classList.add("drawer-open");
+  _updateDrawerHeader(agentId);
+  fetchSession(agentId);
+}
+
+function closeDrawer() {
+  state.drawerAgentId = null;
+  $("agentDrawer").classList.remove("open");
+  $("board").classList.remove("drawer-open");
+}
+
+function _updateDrawerHeader(agentId) {
+  if (!state.snapshot) return;
+  const agents = state.snapshot.hosts.flatMap((h) => h.agents || []);
+  const agent = agents.find((a) => a.id === agentId);
+  if (!agent) return;
+
+  const statusEl = $("drawerStatus");
+  statusEl.className = `pill status-${agent.status}`;
+  statusEl.textContent = avatarCaption(agent.status);
+  $("drawerProject").textContent = agent.display_name || agent.project || "(unknown)";
+  $("drawerMeta").textContent = `${agent.agent_type} · pid ${agent.pid} · ${agent.host}`;
+  $("drawerBranch").textContent = agent.branch ? `分支 · ${agent.branch}` : "";
+
+  const pct = agent.context_pct;
+  const ctxRow = $("drawerCtxRow");
+  if (pct != null) {
+    $("drawerCtxFill").style.width = `${pct}%`;
+    $("drawerCtxLabel").textContent = `Context ${pct}%`;
+    $("drawerCtxPct").textContent = `${pct}%`;
+    ctxRow.style.display = "";
+  } else {
+    ctxRow.style.display = "none";
+  }
+
+  const drawerSendBtn = $("drawerSendBtn");
+  const drawerInput = $("drawerInput");
+  if (!agent.interactive_supported) {
+    drawerSendBtn.disabled = true;
+    drawerInput.disabled = true;
+    drawerInput.placeholder = "这工位现在没法发话";
+  } else {
+    drawerSendBtn.disabled = false;
+    drawerInput.disabled = false;
+    drawerInput.placeholder = "发话或输入 slash 命令…";
+  }
+}
+
+async function fetchSession(agentId) {
+  try {
+    const data = await getJson(`/api/session?agent_id=${encodeURIComponent(agentId)}`);
+    if (state.drawerAgentId === agentId) {
+      renderConvo(data.messages || []);
+    }
+  } catch (err) {
+    if (state.drawerAgentId === agentId) {
+      $("drawerConvo").innerHTML =
+        `<div class="convo-error">加载对话失败: ${escHtml(err.message)}</div>`;
+    }
+  }
+}
+
+function renderConvo(messages) {
+  const convo = $("drawerConvo");
+  const atBottom = convo.scrollHeight - convo.scrollTop - convo.clientHeight < 80;
+
+  convo.innerHTML = "";
+  if (!messages.length) {
+    convo.innerHTML = '<div class="convo-empty">暂无对话记录</div>';
+    return;
+  }
+
+  messages.forEach((msg) => {
+    let el;
+    if (msg.type === "text") {
+      el = document.createElement("div");
+      el.className = `msg-bubble ${msg.role === "user" ? "user" : "assistant"}`;
+      el.textContent = msg.text;
+
+    } else if (msg.type === "tool_use") {
+      const inputStr = JSON.stringify(msg.tool_input || {}, null, 2);
+      const preview = Object.entries(msg.tool_input || {})
+        .map(([k, v]) => `${k}: ${truncateStr(String(v), 40)}`)
+        .join(", ");
+      el = document.createElement("div");
+      el.className = "tool-block";
+      el.innerHTML =
+        `<div class="tool-head" onclick="` +
+        `var b=this.nextElementSibling;b.classList.toggle('open');` +
+        `this.querySelector('.tool-toggle').textContent=b.classList.contains('open')?'▼ 收起':'▶ 展开'` +
+        `"><span class="tool-icon">🔧</span>` +
+        `<span class="tool-name">${escHtml(msg.tool_name)}</span>` +
+        `<span class="tool-args-preview">${escHtml(truncateStr(preview, 60))}</span>` +
+        `<span class="tool-toggle">▶ 展开</span></div>` +
+        `<div class="tool-body">${escHtml(inputStr)}</div>`;
+
+    } else if (msg.type === "tool_result") {
+      el = document.createElement("div");
+      el.className = `tool-result-block${msg.is_error ? " err" : ""}`;
+      const label = msg.tool_name ? `${escHtml(msg.tool_name)} 结果` : "结果";
+      el.innerHTML =
+        `<span class="tool-result-label">${label}</span>` +
+        `<pre>${escHtml(msg.content || "")}</pre>`;
+
+    } else if (msg.type === "thinking") {
+      el = document.createElement("div");
+      el.className = "thinking-block";
+      el.innerHTML =
+        `<span class="thinking-label">💭 思考中</span>${escHtml(msg.text)}`;
+    }
+
+    if (el) convo.appendChild(el);
+  });
+
+  if (atBottom) convo.scrollTop = convo.scrollHeight;
 }
 
 function makeCard(agent) {
@@ -721,3 +842,12 @@ loadDashboard().catch((err) => {
   setHostFormFeedback(String(err.message || err), "err");
 });
 setInterval(silentRefresh, 1000);
+
+$("drawerCloseBtn").addEventListener("click", closeDrawer);
+
+setInterval(() => {
+  if (state.drawerAgentId) {
+    _updateDrawerHeader(state.drawerAgentId);
+    fetchSession(state.drawerAgentId);
+  }
+}, 3000);
