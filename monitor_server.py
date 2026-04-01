@@ -1223,6 +1223,8 @@ def summarize_host(config: dict[str, Any], host_cfg: dict[str, Any]) -> dict[str
         branch = branch_cache[cwd or ""]
         heartbeat_ts = (session or {}).get("heartbeat_ts")
         status = infer_status(proc, session, config)
+        _mac_local = _IS_MACOS and host_cfg.get("mode", "local") == "local"
+        _mac_pane = _get_tmux_pane(proc.pid) if _mac_local else None
         agents.append(
             {
                 "id": f"{host_id}:{proc.agent_type}:{proc.pid}",
@@ -1254,11 +1256,13 @@ def summarize_host(config: dict[str, Any], host_cfg: dict[str, Any]) -> dict[str
                 "context_pct": (session or {}).get("context_pct"),
                 "session_messages": parse_session_messages((session or {}).get("source_file")) if (session or {}).get("source_file") else [],
                 "interactive_supported": (
-                    False if (_IS_MACOS and host_cfg.get("mode", "local") == "local")
+                    (_mac_pane is not None)
+                    if _mac_local
                     else bool(send_template or send_mode == "stdin")
                 ),
                 "send_unsupported_reason": (
-                    "mac-no-tmux" if (_IS_MACOS and host_cfg.get("mode", "local") == "local")
+                    (None if _mac_pane is not None else "mac-no-tmux")
+                    if _mac_local
                     else None
                 ),
                 "updated_at": iso_now(),
