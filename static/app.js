@@ -845,6 +845,52 @@ setInterval(silentRefresh, 1000);
 
 $("drawerCloseBtn").addEventListener("click", closeDrawer);
 
+// Slash command chips fill the input on click
+$("drawerCmdChips").querySelectorAll(".cmd-chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    $("drawerInput").value = chip.dataset.cmd;
+    $("drawerInput").focus();
+  });
+});
+
+// Drawer send button
+const _drawerDoSend = async () => {
+  const agentId = state.drawerAgentId;
+  if (!agentId) return;
+  const drawerSendBtn = $("drawerSendBtn");
+  if (drawerSendBtn.disabled) return;
+  const message = $("drawerInput").value.trim() || "继续";
+  const isContinue = !$("drawerInput").value.trim();
+  drawerSendBtn.disabled = true;
+  const origText = drawerSendBtn.textContent;
+  drawerSendBtn.textContent = "发话中…";
+  const feedback = $("drawerFeedback");
+  try {
+    const res = await postJson("/api/action", { agent_id: agentId, message });
+    const ok = res.result?.returncode === 0;
+    feedback.textContent = ok
+      ? (isContinue ? "已催它继续干活" : `已发话: ${message}`)
+      : (res.result?.stderr || "发不出去");
+    feedback.className = `action-feedback ${ok ? "ok" : "err"}`;
+    if (ok && !isContinue) $("drawerInput").value = "";
+    setTimeout(() => { feedback.textContent = ""; feedback.className = "action-feedback"; }, 3000);
+  } catch (err) {
+    feedback.textContent = String(err.message || err);
+    feedback.className = "action-feedback err";
+  } finally {
+    drawerSendBtn.disabled = false;
+    drawerSendBtn.textContent = origText;
+  }
+};
+
+$("drawerSendBtn").addEventListener("click", _drawerDoSend);
+$("drawerInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    e.preventDefault();
+    _drawerDoSend();
+  }
+});
+
 setInterval(() => {
   if (state.drawerAgentId) {
     _updateDrawerHeader(state.drawerAgentId);
