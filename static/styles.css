@@ -1034,3 +1034,84 @@ summary {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Agent Detail Drawer ── */
+.drawer {
+  position: fixed;
+  right: 0; top: 0; bottom: 0;
+  width: 460px;
+  background: #fff;
+  border-left: 1px solid #e0e2ec;
+  box-shadow: -4px 0 24px rgba(0,0,0,.08);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+  z-index: 200;
+}
+.drawer.open { transform: translateX(0); }
+#board.drawer-open { margin-right: 460px; transition: margin-right .25s; }
+
+.drawer-header { padding: 14px 16px 10px; border-bottom: 1px solid #f0f0f8; flex-shrink: 0; }
+.drawer-header-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.drawer-project { font-weight: 700; font-size: 15px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-close { margin-left: auto; flex-shrink: 0; background: none; border: none; cursor: pointer; color: #aaa; font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 4px; }
+.drawer-close:hover { background: #f5f5f8; color: #555; }
+.drawer-meta { font-size: 11px; color: #999; margin-bottom: 2px; }
+.drawer-ctx { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.drawer-ctx-label { font-size: 11px; color: #888; white-space: nowrap; }
+.drawer-ctx-bar { flex: 1; height: 6px; background: #eef0f8; border-radius: 3px; overflow: hidden; }
+.drawer-ctx-fill { height: 100%; background: linear-gradient(90deg,#52c41a 0%,#faad14 55%,#ff4d4f 82%); border-radius: 3px; transition: width .3s; }
+.drawer-ctx-pct { font-size: 11px; color: #555; font-weight: 600; width: 36px; text-align: right; }
+
+/* Conversation area */
+.convo { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.convo-empty, .convo-error { text-align: center; color: #aaa; font-size: 12px; padding: 24px 0; }
+.convo-error { color: #c0392b; }
+.msg-bubble { padding: 8px 11px; border-radius: 10px; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.msg-bubble.user { background: #eef0fb; color: #2d2b6e; border-bottom-left-radius: 3px; max-width: 88%; align-self: flex-start; }
+.msg-bubble.assistant { background: #f7f7fa; color: #2a2a3a; border-bottom-right-radius: 3px; }
+
+/* Tool blocks */
+.tool-block { border: 1px solid #e8eaf0; border-radius: 8px; overflow: hidden; font-size: 12px; }
+.tool-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #f5f5fc; cursor: pointer; user-select: none; }
+.tool-head:hover { background: #ededf8; }
+.tool-icon { font-size: 13px; }
+.tool-name { font-weight: 600; color: #5553a8; }
+.tool-args-preview { color: #888; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.tool-toggle { margin-left: auto; color: #bbb; font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+.tool-body { padding: 8px 10px; background: #fafafa; border-top: 1px solid #eee; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: #444; white-space: pre-wrap; word-break: break-all; max-height: 180px; overflow-y: auto; display: none; }
+.tool-body.open { display: block; }
+.tool-result-block { padding: 6px 10px; background: #f0faf0; border: 1px solid #c8e8c8; border-radius: 8px; font-size: 11px; }
+.tool-result-block.err { background: #fff0f0; border-color: #ffc8c8; }
+.tool-result-label { font-size: 10px; font-weight: 700; color: #2d6a2d; text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 3px; }
+.tool-result-block.err .tool-result-label { color: #8b2020; }
+.tool-result-block pre { font-family: "IBM Plex Mono", monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 100px; overflow-y: auto; margin: 0; }
+.thinking-block { border: 1px dashed #d8d8f0; border-radius: 8px; padding: 7px 10px; font-size: 12px; color: #777; font-style: italic; background: #fafafe; }
+.thinking-label { font-size: 10px; font-weight: 700; color: #b0a8ff; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; font-style: normal; display: block; }
+
+/* Slash command panel */
+.cmd-panel { border-top: 1px solid #f0f0f8; padding: 8px 12px 10px; flex-shrink: 0; }
+.cmd-label { font-size: 10px; color: #aaa; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+.cmd-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.cmd-chip { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 99px; border: 1px solid #ddddf0; background: #f5f5fc; color: #5553a8; cursor: pointer; transition: background .1s; user-select: none; }
+.cmd-chip:hover { background: #eeeef8; }
+.send-row { display: flex; gap: 6px; margin-bottom: 4px; }
+.send-input { flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid #dde0f0; font-size: 12.5px; background: #f9f9fc; outline: none; font-family: inherit; }
+.send-input:focus { border-color: #6c63ff; background: #fff; }
+.send-btn { padding: 7px 14px; border-radius: 8px; border: none; background: #6c63ff; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.send-btn:hover { background: #5a52e0; }
+.send-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+/* Card activity line + context bar */
+.activity-line { font-size: 12px; color: #555; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-badge { display: inline-block; background: #eef0fb; color: #5553a8; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 4px; vertical-align: middle; }
+.ctx-row { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+.ctx-label { font-size: 10px; color: #999; white-space: nowrap; }
+.ctx-bar { flex: 1; height: 4px; background: #e8eaf0; border-radius: 2px; overflow: hidden; }
+.ctx-fill { height: 100%; border-radius: 2px; transition: width .3s; }
+.ctx-low  { background: #52c41a; }
+.ctx-mid  { background: #faad14; }
+.ctx-high { background: #ff4d4f; }
+.ctx-pct { font-size: 10px; color: #888; width: 32px; text-align: right; }
+.ctx-pct.ctx-pct-high { color: #ff4d4f; font-weight: 700; }
