@@ -22,7 +22,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 _IS_MACOS = sys.platform == "darwin"
@@ -923,6 +923,9 @@ def parse_claude_session(path: Path, todos_root: str | None, tasks_root: str | N
         if not git_branch and obj.get("gitBranch"):
             git_branch = obj.get("gitBranch")
 
+    current_tool: str | None = None
+    context_pct: float | None = None
+
     for raw in reversed(lines[-80:]):
         obj = safe_json_loads(raw)
         if not isinstance(obj, dict):
@@ -934,6 +937,19 @@ def parse_claude_session(path: Path, todos_root: str | None, tasks_root: str | N
             content = msg.get("content")
             if isinstance(content, str):
                 last_user = content
+        if obj.get("type") == "assistant":
+            msg = obj.get("message", {})
+            content_list = msg.get("content") if isinstance(msg.get("content"), list) else []
+            if current_tool is None:
+                for block in reversed(content_list):
+                    if block.get("type") == "tool_use":
+                        current_tool = block.get("name")
+                        break
+            if context_pct is None:
+                usage = msg.get("usage") or {}
+                input_tokens = usage.get("input_tokens")
+                if input_tokens:
+                    context_pct = min(round(input_tokens / 200_000 * 100, 1), 100.0)
 
     pending_items = parse_claude_todos(session_id, todos_root, tasks_root)
     if not pending_items and last_user:
@@ -949,7 +965,86 @@ def parse_claude_session(path: Path, todos_root: str | None, tasks_root: str | N
         "last_user_message": truncate(last_user, 180),
         "git_branch": git_branch,
         "source_file": str(path),
+        "current_tool": current_tool,
+        "context_pct": context_pct,
     }
+
+
+def parse_session_messages(session_file: str, max_lines: int = 150) -> list[dict]:
+    """Parse the last max_lines of a Claude session JSONL into a structured message list."""
+    try:
+        lines = Path(session_file).read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return []
+    lines = lines[-max_lines:]
+    messages: list[dict] = []
+    tool_id_to_name: dict[str, str] = {}
+
+    for raw in lines:
+        obj = safe_json_loads(raw)
+        if not isinstance(obj, dict):
+            continue
+        ts = parse_iso_ts(obj.get("timestamp")) if obj.get("timestamp") else None
+
+        if obj.get("type") == "user":
+            msg = obj.get("message", {})
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                if content.strip():
+                    messages.append({"role": "user", "type": "text", "text": content, "ts": ts})
+            elif isinstance(content, list):
+                for block in content:
+                    btype = block.get("type")
+                    if btype == "tool_result":
+                        raw_content = block.get("content", "")
+                        text = raw_content if isinstance(raw_content, str) else json.dumps(raw_content)
+                        messages.append({
+                            "role": "tool",
+                            "type": "tool_result",
+                            "tool_name": tool_id_to_name.get(block.get("tool_use_id", ""), ""),
+                            "content": truncate(text, 500),
+                            "is_error": bool(block.get("is_error")),
+                            "ts": ts,
+                        })
+                    elif btype == "text" and block.get("text", "").strip():
+                        messages.append({"role": "user", "type": "text", "text": block["text"], "ts": ts})
+
+        elif obj.get("type") == "assistant":
+            msg = obj.get("message", {})
+            content = msg.get("content", [])
+            if isinstance(content, str):
+                if content.strip():
+                    messages.append({"role": "assistant", "type": "text", "text": content, "ts": ts})
+            elif isinstance(content, list):
+                for block in content:
+                    btype = block.get("type")
+                    if btype == "text" and block.get("text", "").strip():
+                        messages.append({"role": "assistant", "type": "text", "text": block["text"], "ts": ts})
+                    elif btype == "tool_use":
+                        name = block.get("name", "")
+                        tool_use_id = block.get("id", "")
+                        if tool_use_id:
+                            tool_id_to_name[tool_use_id] = name
+                        messages.append({
+                            "role": "assistant",
+                            "type": "tool_use",
+                            "tool_name": name,
+                            "tool_input": block.get("input", {}),
+                            "ts": ts,
+                        })
+                    elif btype == "thinking" and block.get("thinking", "").strip():
+                        messages.append({
+                            "role": "assistant",
+                            "type": "thinking",
+                            "text": truncate(block["thinking"], 300),
+                            "ts": ts,
+                        })
+
+        elif obj.get("type") == "summary" and obj.get("summary", "").strip():
+            messages.append({"role": "assistant", "type": "text",
+                             "text": f"[摘要] {obj['summary']}", "ts": ts})
+
+    return messages
 
 
 @dataclass
@@ -1155,6 +1250,8 @@ def summarize_host(config: dict[str, Any], host_cfg: dict[str, Any]) -> dict[str
                 "session_id": (session or {}).get("session_id"),
                 "session_file": (session or {}).get("source_file"),
                 "last_user_message": (session or {}).get("last_user_message"),
+                "current_tool": (session or {}).get("current_tool"),
+                "context_pct": (session or {}).get("context_pct"),
                 "interactive_supported": bool(send_template or send_mode == "stdin"),
                 "updated_at": iso_now(),
             }
@@ -1712,6 +1809,28 @@ class DashboardHandler(BaseHTTPRequestHandler):
             assert self.store is not None
             threading.Thread(target=self.store.refresh, daemon=True).start()
             self._send_json({"ok": True})
+            return
+        if parsed.path == "/api/session":
+            agent_id = parse_qs(parsed.query).get("agent_id", [None])[0]
+            if not agent_id:
+                self._send_json({"ok": False, "error": "agent_id required"}, 400)
+                return
+            agent, host_cfg = self.store.find_agent(agent_id)
+            if not agent:
+                self._send_json({"ok": False, "error": "Agent not found"}, 404)
+                return
+            session_file = agent.get("session_file")
+            if not session_file:
+                self._send_json({"ok": True, "agent_id": agent_id, "messages": [],
+                                 "note": "No session file"})
+                return
+            if host_cfg and host_cfg.get("mode") not in ("local", None):
+                self._send_json({"ok": True, "agent_id": agent_id, "messages": [],
+                                 "note": "Remote session view not supported yet"})
+                return
+            messages = parse_session_messages(session_file)
+            self._send_json({"ok": True, "agent_id": agent_id,
+                             "session_id": agent.get("session_id"), "messages": messages})
             return
         if parsed.path in {"/", "/index.html"}:
             self._serve_static("index.html")
