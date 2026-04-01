@@ -1252,6 +1252,7 @@ def summarize_host(config: dict[str, Any], host_cfg: dict[str, Any]) -> dict[str
                 "last_user_message": (session or {}).get("last_user_message"),
                 "current_tool": (session or {}).get("current_tool"),
                 "context_pct": (session or {}).get("context_pct"),
+                "session_messages": parse_session_messages((session or {}).get("source_file")) if (session or {}).get("source_file") else [],
                 "interactive_supported": (
                     False if (_IS_MACOS and host_cfg.get("mode", "local") == "local")
                     else bool(send_template or send_mode == "stdin")
@@ -1870,11 +1871,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "agent_id": agent_id, "messages": [],
                                  "note": "No session file"})
                 return
-            if host_cfg and host_cfg.get("mode") not in ("local", None):
-                self._send_json({"ok": True, "agent_id": agent_id, "messages": [],
-                                 "note": "Remote session view not supported yet"})
-                return
-            messages = parse_session_messages(session_file)
+            if host_cfg and host_cfg.get("mode") in ("local", None):
+                messages = parse_session_messages(session_file)
+            else:
+                messages = agent.get("session_messages") or []
             self._send_json({"ok": True, "agent_id": agent_id,
                              "session_id": agent.get("session_id"), "messages": messages})
             return
