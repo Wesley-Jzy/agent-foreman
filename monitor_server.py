@@ -925,6 +925,8 @@ def parse_claude_session(path: Path, todos_root: str | None, tasks_root: str | N
 
     current_tool: str | None = None
     context_pct: float | None = None
+    tool_pending = False
+    _tool_state_determined = False
 
     for raw in reversed(lines[-80:]):
         obj = safe_json_loads(raw)
@@ -937,6 +939,26 @@ def parse_claude_session(path: Path, todos_root: str | None, tasks_root: str | N
             content = msg.get("content")
             if isinstance(content, str):
                 last_user = content
+        if not _tool_state_determined:
+            typ = obj.get("type")
+            if typ == "user":
+                msg = obj.get("message", {})
+                content = msg.get("content", [])
+                if isinstance(content, list):
+                    for block in content:
+                        if block.get("type") == "tool_result":
+                            _tool_state_determined = True  # tool already answered
+                            break
+            elif typ == "assistant":
+                msg = obj.get("message", {})
+                cl = msg.get("content", []) if isinstance(msg.get("content"), list) else []
+                has_tool = any(b.get("type") == "tool_use" for b in cl)
+                has_text = any(b.get("type") == "text" for b in cl)
+                if has_tool:
+                    tool_pending = True
+                    _tool_state_determined = True
+                elif has_text:
+                    _tool_state_determined = True
         if obj.get("type") == "assistant":
             msg = obj.get("message", {})
             content_list = msg.get("content") if isinstance(msg.get("content"), list) else []
@@ -967,6 +989,7 @@ def parse_claude_session(path: Path, todos_root: str | None, tasks_root: str | N
         "source_file": str(path),
         "current_tool": current_tool,
         "context_pct": context_pct,
+        "tool_pending": tool_pending,
     }
 
 
@@ -1165,6 +1188,7 @@ def infer_status(proc: ProcInfo, session: dict[str, Any] | None, config: dict[st
     heartbeat_ts = session.get("heartbeat_ts") if session else None
     heartbeat_age = (now - heartbeat_ts) if heartbeat_ts else None
     recent_output = (session or {}).get("recent_output", "") or ""
+    tool_pending = (session or {}).get("tool_pending", False)
 
     for pattern in cfg.get("needs_input_patterns", []):
         try:
@@ -1172,6 +1196,11 @@ def infer_status(proc: ProcInfo, session: dict[str, Any] | None, config: dict[st
                 return "needs-input"
         except re.error:
             continue
+
+    # If the most recent JSONL entry is an unanswered tool_use and the process
+    # is not CPU-hot, Claude Code is waiting at a permission prompt.
+    if tool_pending and proc.cpu < float(cfg.get("busy_cpu_threshold", 20.0)):
+        return "needs-input"
 
     if proc.cpu >= float(cfg.get("busy_cpu_threshold", 20.0)) or proc.stat.startswith(("R", "D")):
         return "busy"
