@@ -285,6 +285,12 @@ function _updateDrawerHeader(agentId) {
     drawerInput.disabled = false;
     drawerInput.placeholder = "发话或输入 slash 命令…";
   }
+
+  const needsInput = agent.status === "needs-input";
+  $("drawerNeedsInputBanner").style.display = needsInput ? "" : "none";
+  $("drawerYnRow").style.display = needsInput ? "flex" : "none";
+  $("drawerCmdLabel").style.display = needsInput ? "none" : "";
+  $("drawerCmdChips").style.display = needsInput ? "none" : "";
 }
 
 async function fetchSession(agentId) {
@@ -353,7 +359,20 @@ function renderConvo(messages) {
     if (el) convo.appendChild(el);
   });
 
-  if (atBottom) convo.scrollTop = convo.scrollHeight;
+  // Highlight last message if agent is waiting for input
+  const _agents = state.snapshot?.hosts.flatMap((h) => h.agents || []) || [];
+  const _agent = _agents.find((a) => a.id === state.drawerAgentId);
+  if (_agent?.status === "needs-input" && convo.lastElementChild) {
+    const last = convo.lastElementChild;
+    last.classList.add("msg-pending");
+    const badge = document.createElement("div");
+    badge.className = "pending-badge";
+    badge.textContent = "待确认";
+    last.prepend(badge);
+    last.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } else if (atBottom) {
+    convo.scrollTop = convo.scrollHeight;
+  }
 }
 
 function makeCard(agent) {
@@ -848,6 +867,14 @@ loadDashboard().catch((err) => {
 setInterval(silentRefresh, 1000);
 
 $("drawerCloseBtn").addEventListener("click", closeDrawer);
+
+// Y/N buttons
+$("drawerYnRow").querySelectorAll(".yn-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    $("drawerInput").value = btn.dataset.msg;
+    _drawerDoSend();
+  });
+});
 
 // Slash command chips fill the input on click
 $("drawerCmdChips").querySelectorAll(".cmd-chip").forEach((chip) => {
