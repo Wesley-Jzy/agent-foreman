@@ -277,7 +277,9 @@ function _updateDrawerHeader(agentId) {
   if (!agent.interactive_supported) {
     drawerSendBtn.disabled = true;
     drawerInput.disabled = true;
-    drawerInput.placeholder = "这工位现在没法发话";
+    drawerInput.placeholder = agent.send_unsupported_reason === "mac-no-tmux"
+      ? "Mac 本地需在 tmux 内运行 agent"
+      : "这工位现在没法发话";
   } else {
     drawerSendBtn.disabled = false;
     drawerInput.disabled = false;
@@ -446,7 +448,9 @@ function makeCard(agent) {
   if (!agent.interactive_supported) {
     sendBtn.disabled = true;
     input.disabled = true;
-    input.placeholder = "这工位现在没法发话";
+    input.placeholder = agent.send_unsupported_reason === "mac-no-tmux"
+      ? "Mac 本地需在 tmux 内运行 agent"
+      : "这工位现在没法发话";
   } else {
     const doSend = async () => {
       if (sendBtn.disabled) return;

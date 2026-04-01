@@ -1252,7 +1252,14 @@ def summarize_host(config: dict[str, Any], host_cfg: dict[str, Any]) -> dict[str
                 "last_user_message": (session or {}).get("last_user_message"),
                 "current_tool": (session or {}).get("current_tool"),
                 "context_pct": (session or {}).get("context_pct"),
-                "interactive_supported": bool(send_template or send_mode == "stdin"),
+                "interactive_supported": (
+                    False if (_IS_MACOS and host_cfg.get("mode", "local") == "local")
+                    else bool(send_template or send_mode == "stdin")
+                ),
+                "send_unsupported_reason": (
+                    "mac-no-tmux" if (_IS_MACOS and host_cfg.get("mode", "local") == "local")
+                    else None
+                ),
                 "updated_at": iso_now(),
             }
         )
